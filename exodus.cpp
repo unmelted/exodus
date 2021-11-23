@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include <vector>
 #include "src/DefData.hpp"
-#include "src/Extractor.hpp"
+#include "src/Covenant.hpp"
 
 using namespace std;
 
@@ -46,7 +46,8 @@ using namespace std;
     DestroyImage(bframe);
 }
  */
-void Process(int cnt, int* region);
+void Start(int cnt, int* gline, int* iline);
+int ProcessStep(int step, int* buffers);
 void Finish();
 
 extern "C" {
@@ -58,12 +59,20 @@ extern "C" {
         cout<< "Cur Version : " << VER << endl;        
     }
 
-    int Extract(int* buffers) {
-        int cnt = buffers[0];
-
-        Logger( "received count %d path %s", cnt);
-        Process(cnt, buffers);
+    int Extract(int* gr_line, int* im_line) {
+        int gcnt = gr_line[0];
+        int icnt = im_line[0];
+        if( gcnt != icnt) {
+            Logger( "something wrong .. %d %d", gcnt, icnt);
+        }
+        Logger( "received count %d %d ", gcnt, icnt);
+        Start(gcnt, gr_line, im_line);
         return 1;
+    }
+
+    int Process(int step, int* buffers) {
+        int result = ProcessStep(step, buffers);
+        return result;
     }
 
     void Exit() {
@@ -71,15 +80,20 @@ extern "C" {
     }
 }
 
-Extractor* ext;
-void Process(int cnt, int* line)  {
-        ext = new Extractor(cnt, line);
-        ext->Execute();
+Covenant* cov;
+void Start(int cnt, int* gline, int* iline)  {
+        cov = new Covenant(3840, cnt, gline, iline);
+        //cov->Execute();
 
         //ext->DrawInfo();
         
 }
+int ProcessStep(int step, int* buffers)  {
+
+    Logger("recived step %d ", step);
+    return 1;
+}
 
 void Finish() {    
-    ext->~Extractor();
+    cov->~Covenant();
 }

@@ -30,26 +30,6 @@ class BaseData(object) :
 
         return newlist
 
-    def getGroundType(self):
-        gr_type = { "BaseballHome" : 1,
-                    "BaseballGround" : 2,
-                    "BasketballHalf" : 3,
-                    "BasketballGround" : 4,
-                    "Boxing" : 5,
-                    "IceLinkHalf" : 6,
-                    "IceLink" : 7,
-                    "SoccerHalf" : 8,
-                    "Soccer" : 9,
-                    "Taekwondo" : 10,
-                    "TennisHalf" : 11 ,
-                    "Tennis" : 12,
-                    "Ufc" : 13,
-                    "VolleyballHalf" : 14,
-                    "VolleyballGround" : 15,
-                    "Football" : 16 }
-        return gr_type
-
-
    
 class Handler(object):
     instance = None
@@ -71,26 +51,26 @@ class Handler(object):
 
     def ExecuteExtract(self) :
         gn.Calibrator.getInstance().setLib(self.bd.libname)        
-        temp = []
-        temp.append(self.dim)
-        print("Execute Extract", self.dim)
+        temp1 = []
+        temp1.append(self.dim)
+        temp2 = []
+        temp2.append(self.dim)
+
         for i in self.gr_line :
-            temp.append(int(i[0]))
-            temp.append(int(i[1]))
-            temp.append(int(i[2]))           
-            temp.append(int(i[3]))
+            temp1.append(int(i[0]))
+            temp1.append(int(i[1]))
+            temp1.append(int(i[2]))           
+            temp1.append(int(i[3]))
         for i in self.img_line :
-            temp.append(int(i[0]))
-            temp.append(int(i[1]))
-            temp.append(int(i[2]))           
-            temp.append(int(i[3]))
+            temp2.append(int(i[0]))
+            temp2.append(int(i[1]))
+            temp2.append(int(i[2]))           
+            temp2.append(int(i[3]))
 
-        print(temp)
-        gn.Calibrator.getInstance().extract(self.dim, temp)
+        print(temp1)
+        print(temp2)
+        gn.Calibrator.getInstance().extract(self.dim, temp1, temp2)
 
-    def setGround(self, ground):
-        self.ground = ground
-        print("setGround is called ", self.ground)
 
     def setRegion(self, gr_line, img_line):
         print("Set Region is called ")
@@ -106,7 +86,6 @@ class Handler(object):
         print(self.img_line)
 
         self.dim = len(self.gr_line)
-        print(self.dim)
 
     def setImgData(self, imageset):
         self.imageset = imageset

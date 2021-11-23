@@ -1,17 +1,17 @@
 ﻿
 /*****************************************************************************
 *                                                                            *
-*                            Extractor      								 *
+*                            Covenant      							    	 *
 *                                                                            *
 *   Copyright (C) 2021 By 4dreplay, Incoporated. All Rights Reserved.        *
 ******************************************************************************
 
-    File Name       : Extractor.Hpp
+    File Name       : Covenant.Hpp
     Author(S)       : Me Eunkyung
-    Created         : 17 Sep 2021
+    Created         : 24 Nov 2021
 
-    Description     : Extractor.Hpp
-    Notes           : Feature Extractor From Image.
+    Description     : Covenant.Hpp
+    Notes           : Auto calibration concept main procedure.
 */
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -25,20 +25,16 @@
 using namespace std;
 using namespace cv;
 
-class Extractor {
+class Covenant {
 
 public :
-    Extractor(string& imgset, int cnt , int* roi);
-    Extractor(int width = 3840, bool _use_gpu = false);    
-    ~Extractor();
+    Covenant(int width, int cnt , int* gline, int* iline);
+    Covenant(int width = 3840, bool _use_gpu = false);    
+    ~Covenant();
     int Execute();
     
-//    int ExecuteSever(string ref_path, string cur_path, string ref_pts_path, string& out_pts_path);
-#if defined GPU
-    int ExecuteClient(cv::cuda::GpuMat ref_file, cv::cuda::GpuMat cur_file, FPt* in_pt, FPt* out_pt, string dsc_id);
-#else
-    int ExecuteClient(Mat ref_file, Mat cur_file, FPt* in_pt, FPt* out_pt, string dsc_id);
-#endif
+    int Process(int step, int* buffers);
+
     PARAM* p;
     MtrxUtil mtrx;
     ExpUtil genutil;
@@ -51,21 +47,22 @@ public :
 
 
 private :
+    string imgset;
     TIMER* t;
     bool verify_mode = false;
     bool use_gpu = false;
+    SCENE* ground;
+    SCENE* base;
+
     SCENE* cur_train = 0;
     SCENE* cur_query = 0;
 
-    int LoadConfig();
-    int UpdateConfig();    
-    void InitializeData(int width = 3840, int cnt = 0, int* roi = 0);
+    void InitializeData(int width = 3840, int cnt = 0, int* gline = 0, int* iline = 0);
     
 //    Mat ProcessImages(Mat& img);
     int ProcessImages(SCENE* sc);
     int ImageMasking(SCENE* sc);
     int GetFeature(SCENE* sc);
-    int CreateFeature(SCENE* sc, bool train = false, bool query = false, int step = -1);    
 
     vector<KeyPoint> KeypointMasking(vector<KeyPoint>* oip);
 
@@ -76,7 +73,6 @@ private :
     int MatchPyramid();    
     int MatchSplit(vector<Point2f> m_train, vector<Point2f>m_query);
     int MatchVerify();
-    float ncc(int max_index, Mat _h);
 
     vector<DMatch> RefineMatch(vector<DMatch> good);
     vector<DMatch> RemoveOutlier(vector<DMatch> matches);
@@ -86,7 +82,6 @@ private :
 
     int PostProcess();
 
-    void NormalizePoint(SCENE* sc, int maxrange);
     int DecomposeHomography();
     ADJST CalAdjustData();
 
