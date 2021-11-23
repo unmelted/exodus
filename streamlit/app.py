@@ -25,17 +25,13 @@ import connector as cn
 def main():
     handle = cn.Handler.getInstance()
     playground = st.sidebar.selectbox("Type", options=list(handle.bd.getGroundType().keys()))
-    
-    print(playground)
-    handle.setGround(playground)
-
     if 'button_id' not in st.session_state:
         st.session_state['button_id'] = ''
     if 'color_to_label' not in st.session_state:
         st.session_state['color_to_label'] = {}
 
     #color_annotation_app()
-    center_circle_app()
+    new_calibration_app()
 
     with st.sidebar:
         st.markdown("---")
@@ -45,79 +41,76 @@ def main():
         )
         
 
-def color_annotation_app():
+def new_calibration_app():
     st.markdown(
         """
-        You can see one image.
-
-        It is first Camera among camera group.
-        
-        Please Select ROI, 4 Region.
+        MAKE LIFE A RIDE..
     """
     )
     groundtype = None
-    scale = 5
-    region = []
+    scale = 4
     obj = None
     handle = cn.Handler.getInstance()
     img_list = handle.bd.getImageList()
     bg_image = Image.open(img_list[0])
-    w, h = bg_image.size[:2]
-    bg_image = bg_image.resize((int(h/scale), int(w/scale)), Image.BILINEAR)
-    print(w, h, bg_image.size[:2])
+    gr_image = Image.open(handle.bd.gr_img)    
+    w, h= bg_image.size[:2]    
+    du_line_gr = []
+    du_line_img = []
+
+    print(w, h)
 
     label_color = (
         st.sidebar.color_picker("Annotation color: ", "#EA1010") + "77"
     )  # for alpha from 00 to FF
     label = st.sidebar.text_input("Label", "Default")
 
-    canvas_result = st_canvas(
+    canvas_result1 = st_canvas(
+        fill_color=label_color,
+        stroke_width=1,
+        background_image=gr_image,
+        drawing_mode='line',
+        key="cvs1",
+    )
+
+    canvas_result2 = st_canvas(
         fill_color=label_color,
         stroke_width=1,
         background_image=bg_image,
-        height=h/scale,
-        width=w/scale,
-        drawing_mode='circle',
-        key="color_annotation_app",
+        drawing_mode='line',
+        key="cvs2",
     )
     if st.button('Select Complete.'):
         st.write('')
-        handle.ExecuteExtract()   
-        #region.clear()     
-        #canvas_result.json_data = None
+        handle.ExecuteExtract()
         time.sleep(10) 
 
-    if canvas_result.json_data is not None :
-        obj = canvas_result.json_data['objects']
+    line_gr = []
+    line_img = []
+    if canvas_result1.json_data is not None :
+        obj1 = canvas_result1.json_data['objects']
+        for i in obj1 : 
+            l = (i['left'] - i['width']/2) * (w / 600)
+            t = (i['top'] - i['height']/2) * (h / 400)
+            r = (i['left'] + i['width']/2) * (w / 600)
+            b = (i['top'] + i['height']/2) * (h / 400)
+            line_gr.append((l, t, r, b))
 
-    if  obj is not None and len(obj)> 0:
-        print(canvas_result.json_data['objects'])
-        print("outer if .....")
-        for ee in obj : 
-            if ee['type'] == 'circle':
-                df = pd.json_normalize(ee)
-                region.append(df['top'], df['left'], df['width'])
+    if canvas_result2.json_data is not None :
+        obj2 = canvas_result2.json_data['objects']
+        for j in obj2 :
+            l = (j['left'] - j['width']/2) * (w / 600)
+            t = (j['top'] - j['height']/2) * (h / 400)
+            r = (j['left'] + j['width']/2) * (w / 600)
+            b = (j['top'] + j['height']/2) * (h / 400)
 
-        st.dataframe(df[["top", "left", "width", "height"]])        
+            line_img.append((l, t, r , b))
 
-            #print(region)
-            #handle.setRegion(region)
-
-#        st.session_state["color_to_label"][label_color] = label
-
-        with st.expander("Color to label mapping"):
-            st.json(st.session_state["color_to_label"])
-    
-    if st.button('Load Result'):
-        path = "saved/"
-        ilist = os.listdir(path)
-        ilist.sort()
-        for i in ilist:
-            if 'save' not in i and 'png' in i:
-                ii = Image.open(path + i)
-                st.text(path + i)
-                st.image(ii)
-
+    du_line_gr = set(line_gr)
+    du_line_img = set(line_img)
+    handle.setRegion(du_line_gr, du_line_img)        
+    print(du_line_gr)    
+    print(du_line_img)
 
 def center_circle_app():
     st.markdown(
@@ -185,7 +178,7 @@ def center_circle_app():
 
 if __name__ == "__main__":
     st.set_page_config(
-        page_title="GENESIS", page_icon=":earthl2:"
+        page_title="EXODUSS", page_icon=":earthl2:"
     )
     st.title("CALIBRATION SIMULATION")
     st.sidebar.subheader("Config")

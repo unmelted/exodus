@@ -1,6 +1,6 @@
 import os
 import pathlib
-import genesis as gn
+import exodus as gn
 
 class BaseData(object) : 
     instance = None
@@ -9,7 +9,9 @@ class BaseData(object) :
     prj_path = os.getcwd() +'/'
     img_path = prj_path + 'image/new/'
     libname = prj_path + 'libexodus.dylib'
-    print(cur_path, prj_path, img_path)
+    gr_img = prj_path + "football.png"
+
+    print(libname)
 
     @staticmethod
     def getInstance():
@@ -55,7 +57,8 @@ class Handler(object):
     instance = None
     ground = None
     imageset = None
-    region = []
+    gr_line = []
+    img_line = []    
     dim = None
     bd = BaseData.getInstance()
 
@@ -66,27 +69,44 @@ class Handler(object):
             Handler.instance = Handler()
         return Handler.instance
 
-    def __init__(self) :
-        gn.Calibrator.getInstance().setLib(self.bd.libname)
-
     def ExecuteExtract(self) :
+        gn.Calibrator.getInstance().setLib(self.bd.libname)        
         temp = []
         temp.append(self.dim)
-        print("Execute Extract", len(self.region))
-        for i in self.region :
-            temp.append(i)
-        gn.Calibrator.getInstance().extract(self.dim, temp, self.bd.img_path)
+        print("Execute Extract", self.dim)
+        for i in self.gr_line :
+            temp.append(int(i[0]))
+            temp.append(int(i[1]))
+            temp.append(int(i[2]))           
+            temp.append(int(i[3]))
+        for i in self.img_line :
+            temp.append(int(i[0]))
+            temp.append(int(i[1]))
+            temp.append(int(i[2]))           
+            temp.append(int(i[3]))
+
+        print(temp)
+        gn.Calibrator.getInstance().extract(self.dim, temp)
 
     def setGround(self, ground):
         self.ground = ground
         print("setGround is called ", self.ground)
 
-    def setRegion(self, rg):
-        for i in rg:
-            self.region.append(int(i))
+    def setRegion(self, gr_line, img_line):
+        print("Set Region is called ")
+        self.gr_line.clear()
+        self.img_line.clear()
 
-        self.dim = int(len(self.region) / 3)
-        print(self.dim, self.region)
+        for i in gr_line:
+            self.gr_line.append(i)
+        for j in img_line:
+            self.img_line.append(j)
+
+        print(self.gr_line)
+        print(self.img_line)
+
+        self.dim = len(self.gr_line)
+        print(self.dim)
 
     def setImgData(self, imageset):
         self.imageset = imageset
