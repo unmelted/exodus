@@ -51,6 +51,14 @@ typedef enum _err {
     EXECUTE_CLIENT_EXCEPTION    = -30,
 } ERR;
 
+typedef enum _state {
+    STATE_NONE      = 0,
+    STATE_PICK_POINT_CHECK      = 1,
+    STATE_NORMAL_VECTOR_CHECK   = 2,
+    STATE_2D_CALIBRATION        = 3,
+    STATE_3D_CALIBRATION        = 4,
+
+}STATE;
 
 typedef struct _Pt
 {    
@@ -74,6 +82,21 @@ typedef struct _FPt
     _FPt() { x = 0.0, y = 0.0; z = 0.0;};
 } FPt;
 
+typedef struct _line {
+    Pt lt;
+    Pt rb;
+
+    _line(Pt a, Pt b) {
+        lt = a;
+        rb = b;
+    };
+    _line() { 
+        lt = Pt();
+        rb = Pt();
+    }
+
+}LINE;
+
 typedef struct _cc {
     Pt center;
     int radius;
@@ -83,14 +106,12 @@ typedef struct _matchpair {
     FPt train;
     FPt query;
     int distance;
-    int pyramid_sacle;
     int kernel_size;
 
     _matchpair(FPt tpt, FPt qpt, int dist, int scl, int ksize ) {
         train = tpt;
         query = qpt;
         distance = dist;
-        pyramid_sacle = scl;
         kernel_size = ksize;
     };
     
@@ -107,13 +128,8 @@ typedef struct _maindata {
 #endif
     Mat mask_img;
 
-    //for pyramid matching
-    Mat pyramid[3];
-    vector<KeyPoint>pyramid_ip[3];
-    int pyramid_ip_per_pt[3];    
-    Mat pyramid_desc[3];
-    vector<MATCHPAIR>pyramid_pair[3];
-    
+    vector<LINE>in_line;
+
     //Pt four_pt[4];
     FPt four_fpt[4];    
     FPt center;
@@ -146,7 +162,6 @@ typedef struct _adj {
 } ADJST;
 
 typedef struct _PARAM {
-    int ground;     //Groud type
     int calibration_type;
     int roi_type;
     int roi_count;
@@ -209,13 +224,6 @@ enum _submatch {
     SPLIT_MATCH    = 3,
 };
 
-enum _preset_calibration_type {
-    PRESET_NONE_2D      = 0,
-    PRESET_NONE_3D      = 1,
-    RECALIBRATION_2D    = 2,
-    RECALIBRATION_3D    = 3, 
-};
-
 enum roitype {
     POLYGON     = 1,
     CIRCLE      = 2,
@@ -232,29 +240,3 @@ enum _coordwd {
     FIRST_MATCH = 0,
     NORMAL_VECTOR_CAL = 1,
 };
-
-enum _keypoint_array {
-    PLANE       = 0,
-    CIRCULAR    = 1,
-};
-
-typedef enum _groundtype
-{
-    BaseballHome,
-    BaseballGround,
-    BasketballHalf,
-    BasketballGround,
-    Boxing,
-    IceLinkHalf,
-    IceLink,
-    SoccerHalf,
-    Soccer,
-    Taekwondo,
-    TennisHalf,
-    Tennis,
-    Ufc,
-    VolleyballHalf,
-    VolleyballGround,
-    Football
-
-} GROUNDTYPE;

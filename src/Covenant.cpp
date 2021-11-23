@@ -1,25 +1,25 @@
 ﻿
 /*****************************************************************************
 *                                                                            *
-*                            Extractor      								 *
+*                            Covenant       								 *
 *                                                                            *
 *   Copyright (C) 2021 By 4dreplay, Incoporated. All Rights Reserved.        *
 ******************************************************************************
 
-    File Name       : Extractor.Cpp
+    File Name       : Covenant.Cpp
     Author(S)       : Me Eunkyung
-    Created         : 17 Sep 2021
+    Created         : 24 Nov 2021
 
-    Description     : Extractor.Cpp
-    Notes           : Feature Extractor From Image.
+    Description     : Covenant.Cpp
+    Notes           : Auto calibration concept main procedure.
 */
 #define _CRT_SECURE_NO_WARNINGS
-#include "Extractor.hpp"
+#include "Covenant.hpp"
 
 using namespace std;
 using namespace cv;
 
-Extractor::Extractor(int width, bool _use_gpu) {
+Covenant::Covenant(int width, bool _use_gpu) {
     if(_use_gpu) {
         use_gpu = true;
     }
@@ -28,27 +28,30 @@ Extractor::Extractor(int width, bool _use_gpu) {
     imgutil = ImgUtil();
     dl = Dlog();
     t = new TIMER();    
-    LoadConfig();
     InitializeData(width);
 }
 
-Extractor::Extractor(string &imgset, int cnt, int *roi)
+Covenant::Covenant(int width, int cnt, int *gline, int *iline)
 {
     mtrx = MtrxUtil();
     genutil = ExpUtil();
     imgutil = ImgUtil();
     dl = Dlog();    
     t = new TIMER();    
-    LoadConfig();    
 
-    InitializeData(3840, cnt, roi);
+    dl.SetLogFilename("TEST");
+    InitializeData(3840, cnt, gline, iline);
+    imgset = "image/new/";
     imgs = imgutil.LoadImages(imgset, &dsc_id);
 
 }
 
-Extractor::~Extractor()
+Covenant::~Covenant()
 {
     dl.Logger("finish 1 ");
+    delete ground;
+    delete base;
+
     if(p->region != NULL)
         g_os_free(p->region);
     dl.Logger("finish 2 ");        
@@ -68,260 +71,33 @@ Extractor::~Extractor()
 //  meminfo();    
 }
 
-int Extractor::LoadConfig() {
 
-    return ERR_NONE;
-}
-
-void Extractor::InitializeData(int width, int cnt, int *roi)
+void Covenant::InitializeData(int width, int cnt, int* gline, int* iline)
 {
     p = (PARAM *)g_os_malloc(sizeof(PARAM));
     p->initialize();
+    int index = 1;
+    ground = new SCENE();
+    base = new SCENE();
+    dl.Logger(" %d %d %d %d ", gline[1], gline[2], gline[3], gline[4]);
+    dl.Logger(" %d %d %d %d ", iline[1], iline[2], iline[3], iline[4]);        
 
-    p->calibration_type = RECALIBRATION_3D;
-    p->match_type = PYRAMID_MATCH;
-    p->submatch_type = SUBMATCH_NONE;
-    p->roi_type = RECTANGLE;
-    p->p_scale = 2;
-    //PRESET_NONE_3D setting value
-    /*
-    p->calibration_type = PRESET_NONE_3D;
-    p->roi_type = CIRCLE;
-    p->masking_type = FOUR_POINT_BASE;
-    p->match_type = PLAIN_MATCH
-    p->submatch_type = BEST_MATCH; */
-
-    if(p->match_type == PLAIN_MATCH) {
-        p->p_scale = 2;
-        if (p->roi_type == POLYGON)
-        {
-            p->roi_count = (cnt - 1) / 2;
-            p->region = (Pt *)g_os_malloc(sizeof(Pt) * p->roi_count);
-            for (int i = 0; i < p->roi_count; i++)
-            {
-                int j = (i * 2) + 1;
-                p->region[i].x = int(roi[j] / p->p_scale);
-                p->region[i].y = int(roi[j + 1] / p->p_scale);
-            }
-        }
-        else if (p->roi_type == CIRCLE)
-        {
-            if (p->masking_type == FOUR_POINT_BASE) {
-                p->roi_count = 4;
-                if (p->match_type == PLAIN_MATCH )
-                    p->circle_fixedpt_radius = 200;
-                else if(p->submatch_type == SPLIT_MATCH)
-                    p->circle_fixedpt_radius = 100;
-                    p->circle_fixedpt_radius_2nd = 120;
-            }
-            else if (p->masking_type == USER_INPUT_CIRCLE)
-                p->roi_count = cnt;
-
-            dl.Logger("Initialize circle roi_count %d %d ", cnt, p->roi_count);
-            p->circles = (Cr *)g_os_malloc(sizeof(Cr) * p->roi_count);
-            for (int i = 0; i < p->roi_count; i++)
-            {
-                int j = (i * 3) + 1;
-                p->circles[i].center.x = int(roi[j] / p->p_scale);
-                p->circles[i].center.y = int(roi[j + 1] / p->p_scale);
-                p->circles[i].radius = int(roi[j + 2] / p->p_scale);
-            }
-        }
+    for(int i = 0 ; i < cnt ; i=i+4) {
+        LINE l1(Pt(gline[i], gline[i+1]), Pt(gline[i+2], gline[i+3]));
+        LINE l2(Pt(iline[i], iline[i+1]), Pt(iline[i+2], iline[i+3]));
+        ground->in_line.push_back(l1);
+        base->in_line.push_back(l2);
     }
-    else if(p->match_type == PYRAMID_MATCH) {
-        if(p->roi_type == RECTANGLE) {
-            if(p->calibration_type == RECALIBRATION_3D) 
-                p->masking_type = FOUR_POINT_BASE;
-            else
-                p->masking_type = INNER_2POINT_BASE;
-
-            p->roi_count = 4;
-            p->pyramid_step = 2;
-            p->pyramid_scale[0] = 1;
-            p->pyramid_scale[1] = 2;
-            p->pyramid_scale[2] = 4;        
-            p->pyramid_patch[0] = 101;
-            p->pyramid_patch[1] = 51; 
-            p->pyramid_patch[2] = 25;
-            p->p_scale = 2;           
-            p->stride[0] = 2;
-            p->stride[1] = 2;            
-            p->stride[2] = 4;            
-            p->base_kernel = 35;
-            p->best_cut = 75.0;
-            p->pixel_diff_cut = 20.0;
-            p->desc_kernel[0] = 3;
-            p->desc_kernel[1] = 3;
-            p->desc_kernel[2] = 3;
-        }
-    }
-
-    if(p->p_scale == 1) { 
-        p->blur_ksize = 15;
-        p->blur_sigma = 0.9;
-        p->desc_byte = 32;
-        p->use_ori = true;
-        p->nms_k = 17;
-        p->fast_k = 21;
-        p->minx = 0;
-
-    } else {
-
-        p->blur_ksize = 7;
-        p->blur_sigma = 0.9;
-        p->desc_byte = 32;
-        p->use_ori = true;
-        p->nms_k = 9;
-        p->fast_k = 21;
-        p->minx = 0;
-    }
-
-    if(width == 3840) {
-        p->pwidth = 3840;
-        p->pheight = 2160;
-    } else if (width == 1920) {
-        p->pwidth = 1920;
-        p->pheight = 1080;                
-    }
-
-    p->sensor_size = 17.30 / 1.35;
-    p->focal = 3840;
-
-    p->world = new SCENE();
-    // nba 
-    /*
-    p->world->four_fpt[0].x = 210.0;
-    p->world->four_fpt[0].y = 318.0;
-    p->world->four_fpt[1].x = 593.0;
-    p->world->four_fpt[1].y = 318.0;
-    p->world->four_fpt[2].x = 593.0;
-    p->world->four_fpt[2].y = 428.0;
-    p->world->four_fpt[3].x = 210.0;
-    p->world->four_fpt[3].y = 428.0;
-    p->world->center.x = 210.0;
-    p->world->center.y = 372.0; */
-    //football
-    /*
-    p->world->four_fpt[0].x = 226.0;
-    p->world->four_fpt[0].y = 695.0;
-    p->world->four_fpt[1].x = 572.0;
-    p->world->four_fpt[1].y = 695.0;
-    p->world->four_fpt[2].x = 572.0;
-    p->world->four_fpt[2].y = 581.0;
-    p->world->four_fpt[3].x = 226.0;
-    p->world->four_fpt[3].y = 581.0;
-    p->world->center.x = 400.0;
-    p->world->center.y = 674.0; */
-    p->world->center.x = 400.0;
-    p->world->center.y = 674.0;    
-
-    p->world->rod_norm = 100;
-    p->camera_matrix = (float *)g_os_malloc(sizeof(float) * 9);
-    p->skew_coeff = (float *)g_os_malloc(sizeof(float) * 4);
-
-    p->world->rod_norm = 0;
-    //NormalizePoint(p->world, 100);
-    p->camera_matrix[0] = p->focal;
-    p->camera_matrix[1] = 0;
-    p->camera_matrix[2] = p->pwidth / 2;
-
-    p->camera_matrix[3] = 0;
-    p->camera_matrix[4] = p->focal;
-    p->camera_matrix[5] = p->pheight / 2;
-
-    p->camera_matrix[6] = 0;
-    p->camera_matrix[7] = 0;
-    p->camera_matrix[8] = 1;
-
-    p->skew_coeff[0] = 0;
-    p->skew_coeff[1] = 0;
-    p->skew_coeff[2] = 0;
-    p->skew_coeff[3] = 0;
 
 }
 
-int Extractor::UpdateConfig()
-{
-    //read config file and update parameter
+int Covenant::Process(int step, int* buffers){
 
-    //or Reset
-    return ERR_NONE;
+    dl.Logger("Process start step %d ", step);
+    return 1;
 }
-
-void Extractor::NormalizePoint(SCENE *sc, int maxrange)
-{
-
-    float minx = sc->four_fpt[0].x;
-    float miny = sc->four_fpt[0].y;
-    float maxx = sc->four_fpt[0].x;
-    float maxy = sc->four_fpt[0].y;
-
-    for (int i = 0; i < 4; i++)
-    {
-        if (minx > sc->four_fpt[i].x)
-            minx = sc->four_fpt[i].x;
-        if (miny > sc->four_fpt[i].y)
-            miny = sc->four_fpt[i].y;
-        if (maxx < sc->four_fpt[i].x)
-            maxx = sc->four_fpt[i].x;
-        if (maxy < sc->four_fpt[i].y)
-            maxy = sc->four_fpt[i].y;
-    }
-
-    dl.Logger("min max %f %f %f %f ", minx, miny, maxx, maxy);
-
-    float range = 0;
-    float marginx = 0;
-    float marginy = 0;
-
-    if ((maxx - minx) > (maxy - miny))
-    {
-        range = maxrange / (maxx - minx);
-        marginy = (maxrange - ((maxy - miny) * range)) / 2.0;
-    }
-    else
-    {
-        range = maxrange / (maxy - miny);
-        marginx = (maxrange - ((maxx - minx) * range)) / 2.0;
-    }
-
-    dl.Logger("range marginx  %f %f %f ", range, marginx, marginy);
-
-    for (int i = 0; i < 4; i++)
-    {
-        sc->four_fpt[i].x = ((float)sc->four_fpt[i].x - minx) * range + marginx;
-        sc->four_fpt[i].y = ((float)sc->four_fpt[i].y - miny) * range + marginy;
-    }
-    /* 
-    sc->normal[0][0] = (400.0 - minx) * range + marginx;
-    sc->normal[0][1] = (656.0 - miny) * range + marginy;
-    sc->normal[0][2] = 0.0;
-    sc->normal[1][0] = (400.0 - minx) * range + marginx;
-    sc->normal[1][1] = (656.0 - miny) * range + marginy;
-    sc->normal[1][2] = -100.0;
- */
-
-    p->normal[0][0] = 50.0;
-    p->normal[0][1] = 50.0;
-    p->normal[0][2] = 0.0;
-    p->normal[1][0] = 50.0;
-    p->normal[1][1] = 50.0;
-    p->normal[1][2] = -100.0;
-
-#if defined _DEBUG
-    dl.Logger("Normalized point 4pt");
-    for (int i = 0; i < 4; i++)
-        dl.Logger(" %f, %f ", sc->four_fpt[i].x, sc->four_fpt[i].y);
-
-    dl.Logger("Normalized point normal.");
-    for (int i = 0; i < 2; i++)
-        for (int j = 0; j < 3; j++)
-            dl.Logger("[%d][%d]  %f", i, j, p->normal[i][j]);
-
-#endif
-}
-
-int Extractor::Execute() {
+    
+int Covenant::Execute() {
 
     int index = 0;
     int ret = -1;
@@ -343,48 +119,6 @@ int Extractor::Execute() {
         if (index == 0)
         {
             sc.id = 0;
-            //nba 30096_10         
-            /*   
-            sc.four_fpt[0].x = 1688.0;
-            sc.four_fpt[0].y = 1058.0;
-            sc.four_fpt[1].x = 2456.0;
-            sc.four_fpt[1].y = 473.0;
-            sc.four_fpt[2].x = 2831.0;
-            sc.four_fpt[2].y = 510.0;
-            sc.four_fpt[3].x = 2165.0;
-            sc.four_fpt[3].y = 1128.0;
-            sc.center.x = 1906.0;
-            sc.center.y = 1092.0;  */
-            //football
-            /*
-            sc.four_fpt[0].x = 1275.0;
-            sc.four_fpt[0].y = 165.0;
-            sc.four_fpt[1].x = 1212.0;
-            sc.four_fpt[1].y = 1560.0;
-            sc.four_fpt[2].x = 3273.0;
-            sc.four_fpt[2].y = 1461.0;
-            sc.four_fpt[3].x = 2364.0;
-            sc.four_fpt[3].y = 148.0;
-            sc.center.x = 1470.0;
-            sc.center.y = 630.0; */
-            /*
-            sc.four_fpt[0].x = 1631.0;
-            sc.four_fpt[0].y = 836.0;
-            sc.four_fpt[1].x = 817.0;
-            sc.four_fpt[1].y = 1239.0;
-            sc.four_fpt[2].x = 2185.0;
-            sc.four_fpt[2].y = 1464.0;
-            sc.four_fpt[3].x = 3001.0;
-            sc.four_fpt[3].y = 900.0; */
-
-            sc.four_fpt[0].x = 1688.0/2;
-            sc.four_fpt[0].y = 1058.0/2;
-            sc.four_fpt[1].x = 2456.0/2;
-            sc.four_fpt[1].y = 473.0/2;
-            sc.four_fpt[2].x = 2831.0/2;
-            sc.four_fpt[2].y = 510.0/2;
-            sc.four_fpt[3].x = 2165.0/2;
-            sc.four_fpt[3].y = 1128.0/2;
 
         }
 
@@ -405,7 +139,7 @@ int Extractor::Execute() {
         }
         else {
             if(sc.id == 0) {
-                ret = CreateFeature(&sc, true, false);
+                ret = 0; //CreateFeature(&sc, true, false);
                 if( ret != ERR_NONE)
                     return ret;
 
@@ -416,7 +150,7 @@ int Extractor::Execute() {
                 //break;
             }
             else {
-                ret = CreateFeature(&sc, false, true);    
+                ret = 0; //CreateFeature(&sc, false, true);    
                 if( ret != ERR_NONE)
                     return ret;
 
@@ -456,122 +190,11 @@ int Extractor::Execute() {
     return ERR_NONE;
 }
 
-#if defined GPU
-int Extractor::ExecuteClient(cv::cuda::GpuMat ref_file, cv::cuda::GpuMat cur_file, FPt* in_pt, FPt* out_pt, std::string dsc_id)
-#else
-int Extractor::ExecuteClient(Mat ref_file, Mat cur_file, FPt* in_pt, FPt* out_pt, std::string dsc_id)
-#endif
-{
-    dl.SetLogFilename(dsc_id);
-    dl.Logger("ExecuteClint start");   
-    imgutil.SetLogFilename(dsc_id);
+int Covenant::ProcessImages(SCENE* sc) {
 
-    int ret = -1;
-    StartTimer(t);
-
-    SCENE ref; SCENE cur;    
-    ref.id = 0;
-    ref.ori_img = ref_file;
-    for(int i = 0; i < p->roi_count; i ++) {
-        ref.four_fpt[i].x = in_pt[i].x;
-        ref.four_fpt[i].y = in_pt[i].y;
-    }
-    dl.Logger("four pt insert ");
-
-    ProcessImages(&ref);
-    ret = CreateFeature(&ref, true, false);
-    if( ret != ERR_NONE)
-        return ret;
-
-    cal_group.push_back(ref);    
-
-    cur.id = 1;        
-    cur.ori_img = cur_file;
-    ProcessImages(&cur);    
-    CreateFeature(&cur, false, true);
-    if( ret != ERR_NONE)
-        return ret;
-
-    cal_group.push_back(cur);        
-
-    SetCurTrainScene(&ref);
-    SetCurQueryScene(&cur);
-    dl.Logger("check 2 ");    
-    ret = Match();
-    dl.Logger("return from FindHomography------  %d", ret);
-    dl.Logger("match consuming %f ", LapTimer(t));        
-    if(ret > p->best_cut) {
-
-        for(int i = 0; i < p->roi_count; i ++) {
-            out_pt[i].x = cur.four_fpt[i].x;
-            out_pt[i].y = cur.four_fpt[i].y;
-            dl.Logger("out_pt update %f  %f ", out_pt[i].x, out_pt[i].y);
-        }
-    }
-    else
-        dl.Logger("Match pyramid fail %d ", ret);
-
-    dl.Logger("------- end  consuming %f ", LapTimer(t));
-
-    return ret;
 }
 
-//Mat Extractor::ProcessImages(Mat &img)
-int Extractor::ProcessImages(SCENE* sc) {
-    if(p->match_type == PLAIN_MATCH) {
-#if not defined GPU
-        Mat blur_img;
-        Mat dst;
-        if (p->p_scale != 1)    {
-            resize(sc->ori_img, dst, Size(int(sc->ori_img.cols / p->p_scale), 
-                int(sc->ori_img.rows / p->p_scale)), 0, 0, 1);
-        }
-        cvtColor(dst, blur_img, cv::COLOR_RGBA2GRAY);
-        normalize(blur_img, dst, 0, 255, NORM_MINMAX, -1, noArray());
-        GaussianBlur(dst, blur_img, {p->blur_ksize, p->blur_ksize}, p->blur_sigma, p->blur_sigma);
-
-        sc->img = blur_img;
-#endif
-    }
-    else {
-#if defined GPU
-        cv::cuda::GpuMat gdst;
-        Mat dst, out;
-        cv::cuda::cvtColor(sc->ori_img, gdst, cv::COLOR_RGBA2GRAY);
-        for (int i = 0; i < p->pyramid_step; i++) {
-            Mat blur_img;
-            if (p->pyramid_scale[i] != 1)
-                cv::cuda::resize(gdst, gdst, Size(int(sc->ori_img.cols / p->pyramid_scale[i]),
-                    int(sc->ori_img.rows / p->pyramid_scale[i])), 0, 0, 1);
-            //            else dst = sc->ori_img;
-            gdst.download(dst);
-            GaussianBlur(dst, blur_img, { p->blur_ksize, p->blur_ksize }, p->blur_sigma, p->blur_sigma);
-            sc->pyramid[i] = blur_img;
-        }
-#else
-        Mat dst, out;
-        cvtColor(sc->ori_img, dst, cv::COLOR_RGBA2GRAY);
-        if (sc->id > 0) {
-            Mat ref;
-            cvtColor(cal_group[0].ori_img, ref, cv::COLOR_RGBA2GRAY);
-            imgutil.ColorCorrection(ref, dst, out);
-            dst = out;
-        }
-        for (int i = 0; i < p->pyramid_step; i++) {
-            Mat blur_img;
-            if (p->pyramid_scale[i] != 1)
-                resize(dst, dst, Size(int(sc->ori_img.cols / p->pyramid_scale[i]),
-                    int(sc->ori_img.rows / p->pyramid_scale[i])), 0, 0, 1);
-            //            else dst = sc->ori_img;
-            GaussianBlur(dst, blur_img, { p->blur_ksize, p->blur_ksize }, p->blur_sigma, p->blur_sigma);
-            sc->pyramid[i] = blur_img;
-        }
-#endif
-    }
-    return ERR_NONE;
-}
-
-int Extractor::ImageMasking(SCENE* sc)
+int Covenant::ImageMasking(SCENE* sc)
 {
     dl.Logger("Image masking function start ");
     Mat mask = Mat::zeros(sc->img.rows, sc->img.cols, CV_8UC1);
@@ -610,7 +233,7 @@ int Extractor::ImageMasking(SCENE* sc)
     return ERR_NONE;    
 }
 
-int Extractor::GetFeature(SCENE *sc) {
+int Covenant::GetFeature(SCENE *sc) {
     // FAST + BRIEF
     //auto feature_detector = FastFeatureDetector::create(p->fast_k, true, FastFeatureDetector::TYPE_9_16);
 
@@ -647,127 +270,7 @@ int Extractor::GetFeature(SCENE *sc) {
     return ERR_NONE;
 }
 
-int Extractor::CreateFeature(SCENE* sc, bool train, bool query, int step) {
-    float rk = 0;
-    float deg_step = 0;
-    float deg_cnt = 0;
-    Ptr<xfeatures2d::BriefDescriptorExtractor> dscr;
-    dscr = xfeatures2d::BriefDescriptorExtractor::create(p->desc_byte, false);
-    dl.Logger("Create Feature is start %d %d", train, query);
-    
-    if(train) {
-        for(int i = p->pyramid_step -1; i >= 0; i --){
-            Mat desc;
-            sc->pyramid_ip_per_pt[i] = p->roi_count;
-            int scl = p->pyramid_scale[i];          
-            for(int j = 0 ; j < p->roi_count; j++) {
-                float cen_x = float(sc->four_fpt[j].x)/scl;
-                float cen_y = float(sc->four_fpt[j].y)/scl;
-//                dl.Logger("train step %d roicnt %d scl %d ", i, j, scl);                                
-                dl.Logger("fpt %4.2f %4.2f cen %4.2f %4.2f ", sc->four_fpt[j].x, sc->four_fpt[j].y, 
-                            cen_x, cen_y); 
-  
-                KeyPoint kp = KeyPoint(cen_x, cen_y, p->desc_kernel[i], -1, 0, 0, j);
-                sc->pyramid_ip[i].push_back(kp);
-            }
-            dl.Logger("train making.. [%d] desc compute  before %d", i, sc->pyramid_ip[i].size());
-            dscr->compute(sc->pyramid[i], sc->pyramid_ip[i], sc->pyramid_desc[i]);
-            dl.Logger("train making.. [%d] desc compute  after %d ", i, sc->pyramid_ip[i].size());
-        }
-
-        dl.Logger("train end kpt size %d %d %d ", sc->pyramid_ip[0].size(), sc->pyramid_ip[1].size(), sc->pyramid_ip[2].size());
-        for(int i = p->pyramid_step -1; i >= 0; i --){
-            if(sc->pyramid_ip[i].size() < p->roi_count) {
-                dl.Logger("cannot make feature & deacription in train ");
-                imgutil.SaveImage(sc, 8);
-                return TRAIN_CREATE_FEATURE_ERR;
-            }
-        }
-    }
-    else if (query) {
-        Mat desc;        
-        const int array_type = PLANE;        
-        if(step == -1 )            
-            step = p->pyramid_step - 1;
-        int i = step;
-        //Logger("query feature step %d ", step);
-        for(int j = 0 ; j < p->roi_count; j++) {            
-            float cen_x, cen_y;            
-            if( array_type == PLANE) {
-                int scl = p->pyramid_scale[i];
-                if(step == p->pyramid_step - 1) {
-                    cen_x = float(cal_group.back().four_fpt[j].x)/scl;
-                    cen_y = float(cal_group.back().four_fpt[j].y)/scl;
-                } else {
-                    cen_x = float(cur_query->pyramid_pair[i+1][j].query.x)/scl;
-                    cen_y = float(cur_query->pyramid_pair[i+1][j].query.y)/scl;
-                }
-
-                //Logger("query feature center %f %f  ", cen_x, cen_y);
-                if(step == 0)  {
-                    rk = p->base_kernel / 4;
-                    sc->pyramid_ip_per_pt[i] = pow(ceil((float)p->base_kernel/4*2 / (float)p->stride[i]), 2);                    
-                }
-                else if(step == 1) {
-                    rk = p->base_kernel / 3;
-                    sc->pyramid_ip_per_pt[i] = pow(ceil((float)p->base_kernel/3*2 / (float)p->stride[i]), 2);
-                } else if (step == 2) {
-                    rk = p->base_kernel / 2;              
-                    sc->pyramid_ip_per_pt[i] = pow(ceil((float)p->base_kernel / (float)p->stride[i]), 2);
-                }
-
-                for(int a = cen_x - rk ; a <= cen_x + rk ; a += p->stride[i]) {
-                    for(int b = cen_y - rk ; b <= cen_y + rk ; b += p->stride[i]) {
-                        KeyPoint kp = KeyPoint(float(a), float(b), p->desc_kernel[i], -1, 0, 0, j);
-                        sc->pyramid_ip[i].push_back(kp);
-                    }
-                }
-
-                dscr->compute(sc->pyramid[i], sc->pyramid_ip[i], sc->pyramid_desc[i]);            
-                dl.Logger("step %d query ip size %d /per pt %d ", i, sc->pyramid_ip[i].size(), sc->pyramid_ip_per_pt[i]); 
-                dl.Logger("step %d desc dimension %d %d ", i, sc->pyramid_desc[i].cols, sc->pyramid_desc[i].rows);
-
-            } else if(array_type == CIRCULAR) {
-
-                int i = 1;
-                int scl = p->pyramid_scale[i];
-                sc->pyramid_ip_per_pt[i] = 65;
-                for(int j = 0 ; j < p->roi_count; j++) {
-                    cen_x = float(cur_query->pyramid_pair[i+1][j].query.x)/scl;
-                    cen_y = float(cur_query->pyramid_pair[i+1][j].query.y)/scl;
-
-                    KeyPoint kp = KeyPoint(cen_x, cen_y, p->base_kernel, -1, 0, 0, j);
-                    sc->pyramid_ip[i].push_back(kp);
-
-                    int polar_step = 5;
-                    for(int k = 0 ; k < polar_step; k ++) {
-                        rk = (p->base_kernel / 2 )/ polar_step * (k + 1);
-                        deg_cnt = (k >= polar_step/2) ? 16: 8;                    
-                        deg_step = 2 * M_PI / deg_cnt;
-                        for(int a = 0 ; a < deg_cnt; a ++){
-                            FPt newpt = mtrx.GetRotatePoint(FPt(cen_x, cen_y), FPt(cen_x, + cen_y - rk), deg_step* a);
-                            KeyPoint kp = KeyPoint(float(newpt.x), float(newpt.y), rk, -1, 0, 0, j);
-                            sc->pyramid_ip[i].push_back(kp);
-                            //dl.Logger("2nd push ip [%d] deg %f  - %4.2f %4.2f size %3.2f ", a, deg_step * a, float(newpt.x), /////float(newpt.y));
-                        }
-                        dl.Logger("push kpt k %d size %d ", k, sc->pyramid_ip[i].size());
-                    }
-                }
-                dscr->compute(sc->pyramid[i], sc->pyramid_ip[i], sc->pyramid_desc[i]);            
-                dl.Logger("step %d query ip size %d /per pt %d ", i, sc->pyramid_ip[i].size(), sc->pyramid_ip_per_pt[i]); 
-                dl.Logger("step %d desc dimension %d %d ", i, sc->pyramid_desc[i].cols, sc->pyramid_desc[i].rows);
-            }
-        }          
-#ifdef _IMGDEBUG        
-        imgutil.SaveImage(sc, 6, 0, p, 0);
-#endif        
-        dl.Logger("query kpt size %d %d %d ", sc->pyramid_ip[0].size(), sc->pyramid_ip[1].size(), sc->pyramid_ip[2].size());
-    }
-    
-    return ERR_NONE;
-}
-
-vector<KeyPoint> Extractor::KeypointMasking(vector<KeyPoint> *oip)
+vector<KeyPoint> Covenant::KeypointMasking(vector<KeyPoint> *oip)
 {
     vector<KeyPoint> ip;
     //dl.Logger("Before masking %d ", oip->size());
@@ -804,7 +307,7 @@ vector<KeyPoint> Extractor::KeypointMasking(vector<KeyPoint> *oip)
     return ip;
 }
 
-int Extractor::Match() {
+int Covenant::Match() {
 
     int ret = -1;
     if(p->match_type == PLAIN_MATCH) {
@@ -814,133 +317,11 @@ int Extractor::Match() {
             ret = MatchPlain();
         }
     }
-    else if(p->match_type == PYRAMID_MATCH) {
-        ret = MatchPyramid();
-    }
     
     return ret;
 }
 
-int Extractor::MatchPyramid() {
-    int result = -1;
-    dl.Logger("MatchPyramid start.. "); 
-    int found[4] = {0, };
-
-    for(int i = p->pyramid_step -1; i >= 0; i --) 
-    {
-        int best_sum = 0;        
-        int scl = p->pyramid_scale[i];                
-        vector<uchar> t_desc;
-        t_desc.assign(cur_train->pyramid_desc[i].data, 
-            cur_train->pyramid_desc[i].data + cur_train->pyramid_desc[i].total());
-        vector<uchar> q_desc;
-        q_desc.assign(cur_query->pyramid_desc[i].data, 
-            cur_query->pyramid_desc[i].data + cur_query->pyramid_desc[i].total());
-
-        dl.Logger("desc size %d %d  roi_count %d ", t_desc.size(), q_desc.size(), p->roi_count);
-        for(int j = 0; j < p->roi_count; j++) {
-            int best = INT8_MAX;
-            int best_index = -1;
-            static const int desc_size = 32; //p->desc_byte;
-            uchar t_seg[desc_size];
-            uchar q_seg[desc_size];
-            uchar best_q[desc_size];
-            memcpy((void *)&t_seg[0], &t_desc[j*p->desc_byte], sizeof(uchar)* p->desc_byte);            
-            int start = j * cur_query->pyramid_ip_per_pt[i]; 
-            int end = (j + 1)* cur_query->pyramid_ip_per_pt[i];
-//            dl.Logger("start %d end %d ", start, end);
-            for(int k = start ; k < end; k++) {
-                memcpy((void *)&q_seg[0], &q_desc[p->desc_byte * k], sizeof(uchar)* p->desc_byte);            
-                int dist = mtrx.Hamming(t_seg, q_seg, p->desc_byte);
-                if(dist < best) {
-                    best = dist;
-                    best_index = k;
-                    memcpy((void *)&best_q[0], (void *)&q_seg[0], sizeof(uchar)* p->desc_byte);
-                }
-                //dl.Logger("distance step %d/%d/%d  dist %d ", i, j, k,  dist);
-            }
-            best_sum += best;            
-            cur_query->pyramid_pair[i].push_back(MATCHPAIR(FPt(cur_train->pyramid_ip[i][j].pt.x * scl,cur_train->pyramid_ip[i][j].pt.y * scl), FPt(cur_query->pyramid_ip[i][best_index].pt.x * scl, cur_query->pyramid_ip[i][best_index].pt.y * scl), 
-                best, scl, int(cur_query->pyramid_ip[i][best_index].size)));
-
-            dl.Logger("best distance %d index %d", best, best_index);
-            dl.Logger("best coord train %f %f query %f %f ", cur_train->pyramid_ip[i][j].pt.x, cur_train->pyramid_ip[i][j].pt.y, cur_query->pyramid_ip[i][best_index].pt.x, cur_query->pyramid_ip[i][best_index].pt.y);
-        }
-#ifdef _IMGDEBUG
-        imgutil.SaveImage(cur_query, 7, 0, p, i);
-#endif        
-        dl.Logger("best sum %d ave %f ", best_sum, float(best_sum/p->roi_count));
-        float ave = float(best_sum)/ float(p->roi_count);
-        int score = 100 - int(ave);
-        if( score < p->best_cut) {
-            result = -1;
-            found[i] = -1;            
-            //break;
-        }
-        else { 
-            result = score;
-        }
-        if(i > 0)
-            CreateFeature(cur_query, false, true, i-1);
-    }
-
-    int total_found = 0;
-    for(int i = 0 ; i < p->roi_count ; i ++) {
-        if(found[i] == 0)
-            total_found++;
-    }
-    if(total_found < 3) {
-        return PYRAMID_MATCH_NOT_FOUND_NEW_POINT;
-    }
-
-    float diff_x = 0;
-    float diff_y = 0;
-    float ave_diff_x = 0; float ave_diff_y = 0;
-
-    for(int i = 0 ; i < p->roi_count ; i ++) {
-        if(found[i] == 0) {
-            diff_x += abs(cur_train->four_fpt[i].x - cur_query->pyramid_pair[0][i].query.x);
-            diff_y += abs(cur_train->four_fpt[i].y - cur_query->pyramid_pair[0][i].query.y);
-            dl.Logger("[%d] DIFF -- %f %f", i, diff_x, diff_y);
-        }
-    }
-    ave_diff_x = diff_x / total_found;
-    ave_diff_y = diff_y / total_found;
-    dl.Logger("AVE DIFF %f %f ", ave_diff_x, ave_diff_y);
-
-    for(int i = 0 ; i < p->roi_count ; i ++) {
-        if(found[i] == 0) {
-            if( abs(cur_train->four_fpt[i].x - cur_query->pyramid_pair[0][i].query.x) > (ave_diff_x + p->pixel_diff_cut) || abs(cur_train->four_fpt[i].y - cur_query->pyramid_pair[0][i].query.y) > (ave_diff_y + p->pixel_diff_cut)) {
-                result = -1;
-                dl.Logger(" Pixel Diff cut out![%d]-- %f %f  ",i, abs(cur_query->pyramid_pair[0][i].query.x - ave_diff_x), abs(cur_query->pyramid_pair[0][i].query.y - ave_diff_y));
-                return PYRAMID_MATCH_FOUND_NEW_POINT_INTEGRITY_FAIL;
-            }
-        }
-    }
-
-    if(result > p->best_cut) {
-        for(int i = 0 ; i < p->roi_count ; i ++) {
-            if(found[i] == 0) {            
-                cur_query->four_fpt[i].x = cur_query->pyramid_pair[0][i].query.x;
-                cur_query->four_fpt[i].y = cur_query->pyramid_pair[0][i].query.y;
-                dl.Logger("final point update %f %f  ", cur_query->pyramid_pair[0][i].query.x,
-                    cur_query->pyramid_pair[0][i].query.y);
-            }
-            else {
-                int sp_i = 0;
-                if (i == 0 ) sp_i = 1;
-                int x_sign = mtrx.SignValue(cur_train->four_fpt[sp_i].x - cur_query->pyramid_pair[0][sp_i].query.x);
-                int y_sign = mtrx.SignValue(cur_train->four_fpt[sp_i].y - cur_query->pyramid_pair[0][sp_i].query.y);
-                cur_query->four_fpt[i].x = (cur_train->four_fpt[i].x - ave_diff_x)* x_sign;
-                cur_query->four_fpt[i].y = (cur_train->four_fpt[i].y - ave_diff_y)* y_sign;
-            }
-        }
-    }
-
-    return result;
-}
-
-int Extractor::MatchPlain() {
+int Covenant::MatchPlain() {
 
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::FLANNBASED);
     vector<DMatch> matches;
@@ -1054,7 +435,7 @@ int Extractor::MatchPlain() {
     return matches.size();
 }
 
-int Extractor::MatchSplit(vector<Point2f> m_train, vector<Point2f>m_query) {
+int Covenant::MatchSplit(vector<Point2f> m_train, vector<Point2f>m_query) {
 
     dl.Logger(" Split Match Start! m_train size %d %d   ", m_train.size(), m_query.size());
     vector<Point2f> mr_train[4];
@@ -1128,7 +509,7 @@ int Extractor::MatchSplit(vector<Point2f> m_train, vector<Point2f>m_query) {
 
         }
 
-        float ncc_ = ncc(k, _h);
+//        float ncc_ = ncc(k, _h);
     }
 
     //Mat _h = estimateRigidTransform(mr_train[max_index], mr_query[max_index], true);
@@ -1157,117 +538,7 @@ int Extractor::MatchSplit(vector<Point2f> m_train, vector<Point2f>m_query) {
     return ERR_NONE;
 }
 
-float Extractor::ncc(int max_index, Mat _h) {
-    int minx_t, miny_t, maxx_t, maxy_t;
-    int minx_q, miny_q, maxx_q, maxy_q;    
-    int width_t, width_q, height_t, height_q;
-    int width, height;
-    int pindex = max_index;
-
-    if (cur_train->four_fpt[pindex].x - p->circle_fixedpt_radius < 0 )
-        minx_t = 0;
-    else 
-        minx_t = (cur_train->four_fpt[pindex].x - p->circle_fixedpt_radius) / p->p_scale;
-
-    if (cur_train->four_fpt[pindex].x + p->circle_fixedpt_radius > p->pwidth) 
-        maxx_t = p->pwidth / p->p_scale;
-    else
-        maxx_t = (cur_train->four_fpt[pindex].x + p->circle_fixedpt_radius) / p->p_scale;
-    
-    if (cur_train->four_fpt[pindex].y - p->circle_fixedpt_radius < 0 )
-        miny_t = 0;
-    else 
-        miny_t = (cur_train->four_fpt[pindex].y - p->circle_fixedpt_radius)/p->p_scale;
-    
-    if (cur_train->four_fpt[pindex].y + p->circle_fixedpt_radius > p->pheight)
-        maxy_t = p->pheight / p->p_scale;
-    else
-        maxy_t = (cur_train->four_fpt[pindex].y + p->circle_fixedpt_radius)/p->p_scale;
-
-
-    if (cur_query->four_fpt[pindex].x - p->circle_fixedpt_radius < 0 )
-        minx_q = 0;
-    else 
-        minx_q = (cur_query->four_fpt[pindex].x - p->circle_fixedpt_radius) / p->p_scale;
-
-    if (cur_query->four_fpt[pindex].x + p->circle_fixedpt_radius > p->pwidth) 
-        maxx_q = p->pwidth / p->p_scale;
-    else
-        maxx_q = (cur_query->four_fpt[pindex].x + p->circle_fixedpt_radius) / p->p_scale;
-    
-    if (cur_query->four_fpt[pindex].y - p->circle_fixedpt_radius < 0 )
-        miny_q = 0;
-    else 
-        miny_q = (cur_query->four_fpt[pindex].y - p->circle_fixedpt_radius)/p->p_scale;
-    
-    if (cur_query->four_fpt[pindex].y + p->circle_fixedpt_radius > p->pheight)
-        maxy_q = p->pheight / p->p_scale;
-    else
-        maxy_q = (cur_query->four_fpt[pindex].y + p->circle_fixedpt_radius)/p->p_scale;
-
-    width_t = maxx_t - minx_t;
-    width_q = maxx_q - minx_q;
-    height_t = maxy_t - miny_t;
-    height_q = maxy_q - miny_q;
-
-    if( width_t == width_q)
-        width = width_t;
-    else
-        width = min(width_t, width_q);
-
-    if( height_t == height_q )    
-        height = height_t;
-    else
-        height = min(height_t, height_q);
-
-
-    Mat sc1 = cur_train->img(Rect(minx_t, miny_t, width, height));
-    Mat sc2 = cur_query->img(Rect(minx_q, miny_q, width, height));
-
-
-    //image debug
-    static int s_index = 0;
-    char filename[40];
-    sprintf(filename, "saved/patch_%d_t.png", s_index);
-    imwrite(filename, sc1);
-    sprintf(filename, "saved/patch_%d_q.png", s_index);    
-    imwrite(filename, sc2);
-    s_index++;
-    
-    vector<uchar> patch1;
-    patch1.assign(sc1.data, sc1.data + sc1.total()*sc1.channels());
-
-    vector<uchar> patch2;
-    patch2.assign(sc2.data, sc2.data + sc2.total()* sc2.channels());
-
-    int tcnt = (p->circle_fixedpt_radius) * (p->circle_fixedpt_radius); //area of rectangle patch
-    double m1, m2, s1, s2, s12, denom, r;
-    m1 = 0; m2 = 0;
-    for ( int i = 0; i < tcnt ; i ++) {
-        m1 += patch1[i];
-        m2 += patch2[i];
-    }
-    m1 /= tcnt;
-    m2 /= tcnt;
-
-    s1 = 0; s2 = 0;
-    for(int i = 0; i < tcnt; i ++) {
-        s1 += (patch1[i] - m1) * (patch1[i] - m1);
-        s2 += (patch2[i] - m2) * (patch2[i] - m2);
-    }
-    denom = sqrt(s1 * s2);
-    s12 = 0;
-    for(int i = 0 ; i < tcnt; i ++) {
-        s12 += (patch1[i] - m1) * (patch2[i] - m2);
-    }
-    r = s12 / denom;
-
-    dl.Logger("Cross correl .. m1 %f m2 %f s1 %f s2 %f s12 %f denom %f tcnt %d -> %f", m1, m2, s1, s2, s12, denom, tcnt, r);
-    return r;
-
-}
-
-vector<DMatch> Extractor::RefineMatch(vector<DMatch> good) {
+vector<DMatch> Covenant::RefineMatch(vector<DMatch> good) {
 
     vector<DMatch>matches;
     vector<DMatch>last;
@@ -1308,7 +579,7 @@ vector<DMatch> Extractor::RefineMatch(vector<DMatch> good) {
 
 };
 
-vector<DMatch> Extractor::RemoveOutlier(vector<DMatch> matches) {
+vector<DMatch> Covenant::RemoveOutlier(vector<DMatch> matches) {
 
     vector<DMatch> result;
     dl.Logger("Remove Outlier is called %d ", matches.size());
@@ -1390,7 +661,7 @@ vector<DMatch> Extractor::RemoveOutlier(vector<DMatch> matches) {
     return result;
 }
 
-int Extractor::PostProcess() {
+int Covenant::PostProcess() {
 
     if(p->match_type == PYRAMID_MATCH) {
         for(int i = 0 ; i < p->roi_count ; i ++)
@@ -1447,7 +718,7 @@ int Extractor::PostProcess() {
     return ERR_NONE;
 }
 
-int Extractor::FindBaseCoordfromWd(int mode)
+int Covenant::FindBaseCoordfromWd(int mode)
 {
     dl.Logger("FindBaseCoordfromW start ");
     Mat cm(3, 3, CV_32F, p->camera_matrix);
@@ -1544,55 +815,11 @@ int Extractor::FindBaseCoordfromWd(int mode)
     else
         cur_query->rod_rotation_matrix = getRotationMatrix2D(Point2f(cur_query->center.x, cur_query->center.y), degree, scale);
 
-#if 0
-    Point2f angle_vec = Point2f(cur_query->normal_vec[1].x - cur_query->normal_vec[0].x,
-                                cur_query->normal_vec[1].y - cur_query->normal_vec[0].y);
-
-    double degree = fastAtan2(angle_vec.x, angle_vec.y);
-    double dnorm = norm(cur_query->normal_vec[0] - cur_query->normal_vec[1]);
-
-    if (cur_query->normal_vec[1].y > cur_query->normal_vec[0].y)
-    {
-        degree = 360.0 - degree;
-        if (degree >= 360)
-            degree -= 360;
-    }
-    else
-    {
-        degree = 180.0 - degree;
-    }
-
-    cur_query->rod_norm = dnorm;
-    cur_query->rod_degree = degree;
-
-    float diffnorm = 0;
-    if (cur_query->id == 0)
-        diffnorm = 1;
-    else
-    {
-        diffnorm = cal_group[0].rod_norm / cur_query->rod_norm;
-        dl.Logger("second train norm %f diff norm %f ", cal_group[0].rod_norm, diffnorm);
-    }
-
-    dl.Logger("dnorm %f degree %f", cur_query->rod_norm, cur_query->rod_degree);
-    dl.Logger(" ---- ");
-    if (cur_query->id == 0)
-        cur_query->rod_rotation_matrix = getRotationMatrix2D(Point2f(cur_query->center.x, cur_query->center.y), degree, 1);
-    else
-    {
-        cur_query->rod_rotation_matrix = getRotationMatrix2D(Point2f(cur_query->center.x, cur_query->center.y), degree, diffnorm);
-    }
-
-    for (int i = 0; i < cur_query->rod_rotation_matrix.rows; i++)
-        for (int j = 0; j < cur_query->rod_rotation_matrix.cols; j++)
-            dl.Logger("[%d][%d] %f ", i, j, cur_query->rod_rotation_matrix.at<double>(i, j));
-
-#endif
     return 1;
 }
 
 
-ADJST Extractor::CalAdjustData()
+ADJST Covenant::CalAdjustData()
 {
     ADJST newadj;
 
@@ -1702,7 +929,7 @@ ADJST Extractor::CalAdjustData()
     return newadj;
 }
 
-int Extractor::WarpingStep1()
+int Covenant::WarpingStep1()
 {
     //Test
     //Image Warping
@@ -1752,7 +979,7 @@ int Extractor::WarpingStep1()
     return ERR_NONE;
 }
 
-int Extractor::DecomposeHomography()
+int Covenant::DecomposeHomography()
 {
 
     Mat _h = cur_query->matrix_fromimg;
@@ -1781,7 +1008,7 @@ int Extractor::DecomposeHomography()
     return ERR_NONE;
 }
 
-int Extractor::FindHomographyP2P()
+int Covenant::FindHomographyP2P()
 {
 
     Mat ppset1(4, 2, CV_32F);

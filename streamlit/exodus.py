@@ -36,11 +36,11 @@ class Calibrator(object) :
         print(self.clib)
 
 
-    def extract(self, dim, arr):
+    def extract(self, dim, gr_line, im_line):
         print("exodus.py extract is called")
-        print(dim, arr)
-        d = (c.c_int * ( (dim* 8) + 1))(*arr)
+        d = (c.c_int * ( (dim* 4) + 1))(*gr_line)
+        e = (c.c_int * ( (dim* 4) + 1))(*im_line)
         #ch = c.create_string_buffer(img_path)
         print("Calibrator is called ")        
-        self.clib.Extract(c.byref(d))
+        self.clib.Extract(c.byref(d), c.byref(e))
 
