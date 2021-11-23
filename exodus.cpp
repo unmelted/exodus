@@ -46,7 +46,7 @@ using namespace std;
     DestroyImage(bframe);
 }
  */
-void Process(int cnt, int* region, char* img_path);
+void Process(int cnt, int* region);
 void Finish();
 
 extern "C" {
@@ -58,11 +58,11 @@ extern "C" {
         cout<< "Cur Version : " << VER << endl;        
     }
 
-    int Extract(int* buffers, char* img_path) {
+    int Extract(int* buffers) {
         int cnt = buffers[0];
 
-        Logger( "received count %d path %s", cnt, img_path);
-        Process(cnt, buffers, img_path);
+        Logger( "received count %d path %s", cnt);
+        Process(cnt, buffers);
         return 1;
     }
 
@@ -72,9 +72,8 @@ extern "C" {
 }
 
 Extractor* ext;
-void Process(int cnt, int* region, char* img_path) {
-        string imgset(img_path);    
-        ext = new Extractor(imgset, cnt, region);
+void Process(int cnt, int* line)  {
+        ext = new Extractor(cnt, line);
         ext->Execute();
 
         //ext->DrawInfo();
