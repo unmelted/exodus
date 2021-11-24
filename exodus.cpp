@@ -1,17 +1,17 @@
 
 /*****************************************************************************
 *                                                                            *
-*                            Genesis          								 *
+*                            Exodus          								 *
 *                                                                            *
 *   Copyright (C) 2021 By 4dreplay, Incoporated. All Rights Reserved.        *
 ******************************************************************************
 
-    File Name       : genesis.pp
+    File Name       : exodus.cpp
     Author(S)       : Me Eunkyung
-    Created         : 21 Sep 2021
+    Created         : 23 Nov 2021
 
-    Description     : genesis.cpp
-    Notes           : Python - C library connector.
+    Description     : exodus.cpp
+    Notes           : Python - C library connector in c side.
 */
 
 #include <filesystem>
