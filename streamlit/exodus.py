@@ -1,3 +1,20 @@
+
+'''
+*****************************************************************************
+*                                                                            *
+*                            Exodus          								 *
+*                                                                            *
+*   Copyright (C) 2021 By 4dreplay, Incoporated. All Rights Reserved.        *
+******************************************************************************
+
+    File Name       : exodus.py
+    Author(S)       : Me Eunkyung
+    Created         : 23 Nov 2021
+
+    Description     : exodus.py
+    Notes           : Python - C  connector in python side.
+'''
+
 import os
 import cv2
 import ctypes as c
