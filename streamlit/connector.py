@@ -1,3 +1,20 @@
+
+'''
+*****************************************************************************
+*                                                                            *
+*                            connector         								 *
+*                                                                            *
+*   Copyright (C) 2021 By 4dreplay, Incoporated. All Rights Reserved.        *
+******************************************************************************
+
+    File Name       : connector.py
+    Author(S)       : Me Eunkyung
+    Created         : 23 Nov 2021
+
+    Description     : connector.py
+    Notes           : data handler fomr ui.
+'''
+
 import os
 import pathlib
 import exodus as gn
